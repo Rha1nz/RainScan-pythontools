@@ -46,7 +46,11 @@ Nota para entornos Windows: Para la inyección y captura de paquetes en Capa 2 (
 
 ## 📝 Capturas de Pantalla
 
-*(Proximamente)
+### Resultados del Escaneo de Puertos y Vectores de Ataque
+![Escaneo de puertos](img/image1.png)
+
+### Escaneo ARP
+![Escaneo ARP](img/image2.png)
 
 ---
 
