@@ -59,18 +59,29 @@ Nota para entornos Windows: Para la inyección y captura de paquetes en Capa 2 (
 
 El script de portscanner.py se puede ejecutar directamente desde terminal haciendo uso de:
 
-# Escaneo rápido (Top 20 puertos)
+**1. Escaneo rápido con modo automático (Top 20 puertos)**
+
+Si quieres lanzar el escaneo contra una IP sin que el programa te haga ninguna pregunta, puedes usar el argumento --target (o -t) y el --modo (o -m):
 
 ```
 python portscaner.py -t 192.168.1.1 -m 1
 ```
 
-# Escaneo rango personalizado
+**2. Escaneo de puertos específicos**
+
+Si solo quieres verificar, por ejemplo, si el puerto SSH (22) y el HTTP (80) están abiertos en tu servidor:
 
 ```
-python portscaner.py -t 192.168.1.1 -m 3 -p "1-1024"
+python portscaner.py -t 192.168.1.1 -m 2 -p "22,80"
 ```
 
+**3. Escaneo de un rango completo**
+
+Si necesitas hacer un barrido del puerto 1 al 100 para ver qué servicios hay corriendo:
+
+```
+python portscaner.py -t 192.168.1.1 -m 3 -p "1-100"
+```
 
 ---
 
