@@ -21,32 +21,47 @@
 ### Prerrequisitos
 El script requiere Python 3.x y las siguientes librerías de dependencias:
 
+```bash
 pip install colorama scapy
+```
 
-Nota para entornos Windows: Para la inyección y captura de paquetes en Capa 2 (ARP Scan), es necesario tener instalado Npcap en modo de compatibilidad con la API de WinPcap. En entornos Linux (Kali/Arch), se requiere ejecutar el script principal con privilegios de superusuario (sudo).
+Nota para entornos Windows: Para la inyección y captura de paquetes en Capa 2 (ARP Scan), es necesario tener instalado [Npcap](https://npcap.com/) en modo de compatibilidad con la API de WinPcap. En entornos Linux (Kali/Arch), se requiere ejecutar el script principal con privilegios de superusuario (sudo).
 
 ---
 
 ## 🚀 Modo de Uso
 
-1. Ejecuta el archivo principal para iniciar el framework:
-   python main.py
+**1. Ejecuta el archivo principal para iniciar el framework:**
 
-2. Configura tu objetivo (puede ser una IP individual para escaneo de puertos o un segmento CIDR para el escaneo ARP):
+```
+   python main.py
+```
+
+**2. Configura tu objetivo (puede ser una IP individual para escaneo de puertos o un segmento CIDR para el escaneo ARP):**
+
+```
    rainscan > set target 192.168.1.1
    [+] Objetivo fijado: 192.168.1.1
+```
 
-3. Ejecuta los módulos disponibles:
+**3. Ejecuta los módulos disponibles:**
+
+```
    rainscan (192.168.1.1) > portscan
    rainscan (192.168.1.0/24) > arpscan
+```
 
-4. Escribe help en cualquier momento para ver la lista completa de comandos de la consola.
+**4. Escribe help en cualquier momento para ver la lista completa de comandos de la consola.**
 
 ---
 
 ## 📝 Capturas de Pantalla
 
-*(Proximamente)
+### Resultados del Escaneo de Puertos y Vectores de Ataque
+![Escaneo de puertos](img/image1.png)
+
+### Escaneo ARP
+![Escaneo ARP](img/image2.png)
 
 ---
 
