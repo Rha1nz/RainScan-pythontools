@@ -1,4 +1,4 @@
-# RainScan v1.0 🚀
+# RainScan v1.1 🚀
 
 **RainScan** es un framework modular e interactivo de auditoría de redes y reconocimiento desarrollado en Python. Diseñado con una interfaz de consola interactiva inspirada en herramientas de explotación profesional, permite realizar descubrimientos locales y análisis de superficies de ataque de manera eficiente y centralizada.
 
@@ -9,11 +9,13 @@
 - **Consola Interactiva Dinámica:** Prompt interactivo a color (utilizando colorama) que cambia en tiempo real según el objetivo fijado.
 - **Módulo ARP Scan:** Descubrimiento rápido de hosts activos y sus respectivas direcciones MAC dentro de un segmento de red local (Capa 2) utilizando Scapy.
 - **Módulo Port Scan Elusivo:** Escaneo de puertos críticos y vulnerables comunes (21, 22, 23, 80, 443, 445, etc.) optimizado con técnicas de evasión:
-  - Aleatorización: Mezcla el orden de los puertos para romper patrones secuenciales detectables por sistemas IDS.
-  - Delays: Introduce retrasos de tiempo aleatorios entre conexiones para imitar el tráfico humano.
-- **Inteligencia de Amenazas:** Mapeo automatizado de vectores de ataque potenciales y exploits históricos (como EternalBlue/WannaCry) según los puertos detectados abiertos.
+    - **Motor Multihilo:** Escaneos masivos en segundos utilizando `ThreadPoolExecutor`.
+    - **Detección de Host:** Verificación inteligente mediante ICMP antes de escanear.
+    - **Banner Grabbing:** Identificación automática de servicios y versiones activas.
+    - **Reportes Estructurados:** Exportación automática a formatos `.gnmap` y `.json`.
+    - **Automatización CLI:** Soporte total para argumentos desde consola (`argparse`).
+    - **Inteligencia de Amenazas:** Mapeo automatizado de vectores de ataque potenciales y exploits históricos (como EternalBlue/WannaCry) según los puertos detectados abiertos.
 - **Interoperabilidad:** Exportación automática de resultados a formato grepable (.gnmap) y generación de cadenas de comando optimizadas listas para copiar y pegar directamente en Nmap.
-
 ---
 
 ## 🛠️ Requisitos e Instalación
@@ -52,6 +54,23 @@ Nota para entornos Windows: Para la inyección y captura de paquetes en Capa 2 (
 ```
 
 **4. Escribe help en cualquier momento para ver la lista completa de comandos de la consola.**
+
+## Port Scanner
+
+El script de portscanner.py se puede ejecutar directamente desde terminal haciendo uso de:
+
+# Escaneo rápido (Top 20 puertos)
+
+```
+python portscaner.py -t 192.168.1.1 -m 1
+```
+
+# Escaneo rango personalizado
+
+```
+python portscaner.py -t 192.168.1.1 -m 3 -p "1-1024"
+```
+
 
 ---
 
