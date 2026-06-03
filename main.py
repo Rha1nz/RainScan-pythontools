@@ -5,7 +5,7 @@ init(autoreset=True)  # Inicializa los colores
 def mostrar_menu():
     print(Fore.CYAN + """
     =============================================
-    |                RAINSCAN v1.0              |
+    |                RAINSCAN v1.1              |
     =============================================
     """)
 

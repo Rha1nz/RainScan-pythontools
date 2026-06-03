@@ -1,99 +1,240 @@
 import socket
-import random
 import time
+import json
+import subprocess
+import platform
+import argparse
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from colorama import Fore, Style, init
 
 # Inicializar colores
 init(autoreset=True)
 
-# Base de conocimiento: Vectores de ataque potenciales por puerto
-VECTORES_ATAQUE = {
-    21: "FTP: Riesgo de inicio de sesión anónimo, exploits de fuerza bruta o vulnerabilidades de ejecución de código en versiones antiguas (ej. vsftpd 2.3.4).",
-    22: "SSH: Objetivo común para ataques de diccionario y fuerza bruta. Se recomienda auditar si permite autenticación por contraseña simple.",
-    23: "Telnet: ¡Crítico! Todo el tráfico (incluyendo credenciales) viaja en texto plano. Vulnerable a interceptación de datos (sniffing).",
-    25: "SMTP: Posible enumeración de usuarios válidos del sistema o retransmisión abierta de correo (Open Relay).",
-    53: "DNS: Exposición a transferencias de zona no autorizadas (AXFR) o envenenamiento de caché.",
-    80: "HTTP: Superficie de ataque web. Requiere inspección de directorios ocultos, inyecciones de código (SQLi, XSS) o fallos en CMS.",
-    110: "POP3: Descarga de correos sin cifrar. Las credenciales pueden ser capturadas fácilmente en la red local.",
-    139: "NetBIOS: Divulgación de información sensible (chismoso). Permite enumerar nombres de sistemas, dominios y usuarios activos.",
-    443: "HTTPS: Auditoría requerida para comprobar el uso de cifrados SSL/TLS obsoletos (Heartbleed, Poodle) o fallos web.",
-    445: "SMB: Vector de máxima prioridad. Exposición a exploits de ejecución remota de código críticos (EternalBlue MS17-010, WannaCry).",
-    3389: "RDP: Riesgo de secuestro de sesión, ataques de fuerza bruta o exploits de ejecución remota de código (BlueKeep)."
+PUERTOS_CLAVE = {
+    20: "FTP Data", 21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP",
+    53: "DNS", 80: "HTTP", 110: "POP3", 111: "RPCBind", 135: "MSRPC",
+    139: "NetBIOS", 143: "IMAP", 443: "HTTPS", 445: "SMB", 465: "SMTPS",
+    587: "SMTP Submission", 993: "IMAPS", 995: "POP3S", 3306: "MySQL",
+    3389: "RDP", 5432: "PostgreSQL", 5900: "VNC", 8080: "HTTP-Proxy"
 }
 
-def escanear_puertos(ip_objetivo):
-    puertos_clave = {
-        21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP", 
-        53: "DNS", 80: "HTTP", 110: "POP3", 139: "NetBIOS", 
-        443: "HTTPS", 445: "SMB", 3389: "RDP"
-    }
+VECTORES_ATAQUE = {
+    21: "FTP: Riesgo de inicio de sesión anónimo, exploits en versiones antiguas.",
+    22: "SSH: Objetivo común para ataques de diccionario y fuerza bruta.",
+    23: "Telnet: ¡Crítico! Tráfico en texto plano. Vulnerable a sniffing.",
+    25: "SMTP: Enumeración de usuarios o Open Relay.",
+    53: "DNS: Transferencias de zona no autorizadas (AXFR).",
+    80: "HTTP: Superficie de ataque web. Fallos en el servidor web.",
+    139: "NetBIOS: Divulgación de información sensible (usuarios, dominios).",
+    443: "HTTPS: Uso de cifrados obsoletos o fallos web.",
+    445: "SMB: Vector crítico. Ejecución remota de código (ej: EternalBlue).",
+    3306: "MySQL: Bases de datos expuestas a fuerza bruta o inyecciones.",
+    3389: "RDP: Riesgo de secuestro de sesión o exploits (BlueKeep)."
+}
 
-    print(Fore.YELLOW + f"\n[*] Iniciando escaneo sigiloso y aleatorizado en: {ip_objetivo}")
-    print(Fore.CYAN + "-" * 55)
+# Candado para que los hilos no se pisen al imprimir en consola a color
+print_lock = threading.Lock()
 
-    # MEJORA DE SIGILO 1: Convertir las llaves en lista y desordenar el orden de escaneo
-    # Esto rompe el patrón secuencial que los sistemas de detección (IDS) identifican fácilmente
-    lista_puertos = list(puertos_clave.keys())
-    random.shuffle(lista_puertos)
+def verificar_host_activo(ip):
+    """
+    Envía un paquete ICMP (Ping) para verificar si el host está encendido.
+    """
+    parametro = '-n' if platform.system().lower() == 'windows' else '-c'
+    tiempo_espera = '1000' if platform.system().lower() == 'windows' else '1'
+    comando = ['ping', parametro, '1', '-w', tiempo_espera, ip]
+    
+    try:
+        # Ejecutamos el ping silenciosamente
+        resultado = subprocess.run(comando, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return resultado.returncode == 0
+    except Exception:
+        return False
 
-    puertos_abiertos = []
-
-    for puerto in lista_puertos:
-        servicio = puertos_clave[puerto]
-        
-        # MEJORA DE SIGILO 2: Retraso de tiempo aleatorio entre puertos (Antispam / Delay)
-        # Hace que el tráfico se mezcle y parezca comportamiento humano normal
-        delay = random.uniform(0.5, 1.5)
-        time.sleep(delay)
-        
+def capturar_banner(ip, puerto):
+    try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
+        sock.settimeout(2) 
+        sock.connect((ip, puerto))
         
-        resultado = sock.connect_ex((ip_objetivo, puerto))
+        try:
+            banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+            if banner:
+                return banner
+        except socket.timeout:
+            pass 
         
-        if resultado == 0:
-            print(Fore.GREEN + f"[+] Puerto {puerto} ({servicio}) -> ABIERTO")
-            puertos_abiertos.append(puerto)
-        else:
-            print(Fore.RED + f"[-] Puerto {puerto} ({servicio}) -> CERRADO")
+        if puerto in [80, 443, 8080]:
+            peticion = f"GET / HTTP/1.1\r\nHost: {ip}\r\n\r\n"
+            sock.send(peticion.encode())
+            respuesta = sock.recv(1024).decode('utf-8', errors='ignore')
+            for linea in respuesta.split('\n'):
+                if 'Server:' in linea:
+                    return linea.strip()
+            return "Servicio Web (Banner oculto)"
             
+        return "Servicio silencioso"
+    except Exception:
+        return "No se pudo capturar el banner"
+    finally:
         sock.close()
 
-    print(Fore.CYAN + "-" * 55)
-    print(Fore.YELLOW + "[*] Escaneo de puertos finalizado.")
+def trabajador_escaneo(ip, puerto, puertos_abiertos, banners_encontrados, total_puertos):
+    """
+    Función que ejecuta cada hilo (thread) de forma independiente.
+    """
+    servicio = PUERTOS_CLAVE.get(puerto, "Desconocido")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)
+    resultado = sock.connect_ex((ip, puerto))
+    sock.close()
 
-    # MÓDULO DE REPORTE E INTELIGENCIA (Solo si se encontraron puertos abiertos)
-    if puertos_abiertos:
-        # Aseguramos ordenar los puertos numéricamente para los reportes finales
-        puertos_ordenados = sorted(puertos_abiertos)
+    if resultado == 0:
+        banner = capturar_banner(ip, puerto)
+        # Usamos el lock para que el texto no se mezcle en pantalla
+        with print_lock:
+            print(Fore.GREEN + f"[+] Puerto {puerto} ({servicio}) -> ABIERTO")
+            if banner and "No se pudo" not in banner and "silencioso" not in banner:
+                print(Fore.LIGHTBLACK_EX + f"    └─ Banner: {banner}")
         
+        puertos_abiertos.append(puerto)
+        banners_encontrados[puerto] = banner
+    else:
+        with print_lock:
+            if total_puertos <= 50:
+                print(Fore.RED + f"[-] Puerto {puerto} ({servicio}) -> CERRADO")
+
+def escanear_puertos(ip_objetivo, modo=None, parametro_puertos=None):
+    print(Fore.YELLOW + f"\n[*] Preparando escaneo contra {ip_objetivo}...")
+    
+    # 1. VERIFICACIÓN DE HOST ACTIVO (Pre-check)
+    print(Fore.LIGHTBLACK_EX + "[*] Realizando ping de descubrimiento (Host Discovery)...")
+    if verificar_host_activo(ip_objetivo):
+        print(Fore.GREEN + "[+] ¡El host está activo y responde a ICMP!")
+    else:
+        print(Fore.LIGHTRED_EX + "[-] El host parece inactivo o está bloqueando paquetes Ping (Firewall).")
+        respuesta = input(Fore.YELLOW + "[?] ¿Deseas forzar el escaneo de todas formas? (s/n): " + Style.RESET_ALL).strip().lower()
+        if respuesta != 's':
+            print(Fore.RED + "[-] Escaneo abortado.")
+            return
+
+    # 2. MENÚ INTERACTIVO (Si no se pasaron argumentos)
+    if not modo:
+        print(Fore.CYAN + "\n[⚙️ CONFIGURACIÓN DE ESCANEO]")
+        print("1. Top 20+ Puertos Comunes (Recomendado)")
+        print("2. Puertos Específicos (ej: 22,80,443)")
+        print("3. Rango de Puertos (ej: 1-1024)")
+        modo = input(Fore.BLUE + "[?] Elige el modo de escaneo (1/2/3): " + Style.RESET_ALL).strip()
+        
+        if modo == "2":
+            parametro_puertos = input(Fore.BLUE + "[?] Ingresa los puertos separados por coma: " + Style.RESET_ALL)
+        elif modo == "3":
+            parametro_puertos = input(Fore.BLUE + "[?] Ingresa el rango (ej: 1-100): " + Style.RESET_ALL)
+
+    lista_puertos = []
+    
+    if modo == "2" and parametro_puertos:
+        try:
+            lista_puertos = [int(p.strip()) for p in parametro_puertos.split(",")]
+        except ValueError:
+            lista_puertos = list(PUERTOS_CLAVE.keys())
+    elif modo == "3" and parametro_puertos:
+        try:
+            inicio, fin = map(int, parametro_puertos.split("-"))
+            lista_puertos = list(range(inicio, fin + 1))
+        except ValueError:
+            lista_puertos = list(PUERTOS_CLAVE.keys())
+    else:
+        lista_puertos = list(PUERTOS_CLAVE.keys())
+
+    print(Fore.YELLOW + f"\n[*] Iniciando motor multihilo...")
+    print(Fore.YELLOW + f"[*] Total de puertos a analizar: {len(lista_puertos)}")
+    print(Fore.CYAN + "-" * 65)
+
+    puertos_abiertos = []
+    banners_encontrados = {}
+
+    # 3. CONCURRENCIA (Multi-threading)
+    # Ajustamos la cantidad de hilos: un máximo de 50 a la vez para no saturar la red
+    max_hilos = min(50, len(lista_puertos))
+    
+    tiempo_inicio = time.time()
+    
+    with ThreadPoolExecutor(max_workers=max_hilos) as ejecutor:
+        for puerto in lista_puertos:
+            ejecutor.submit(trabajador_escaneo, ip_objetivo, puerto, puertos_abiertos, banners_encontrados, len(lista_puertos))
+
+    tiempo_fin = time.time()
+    
+    print(Fore.CYAN + "-" * 65)
+    print(Fore.YELLOW + f"[*] Escaneo finalizado en {round(tiempo_fin - tiempo_inicio, 2)} segundos.")
+
+    # 4. REPORTES Y EXPORTACIÓN JSON/GNMAP
+    if puertos_abiertos:
+        puertos_ordenados = sorted(puertos_abiertos)
         print(Fore.GREEN + "\n[+] ANÁLISIS POST-ESCANEO:")
         
-        # MEJORA 3: Generar cadena formateada para copiar directo a Nmap
         cadena_nmap = ",".join(map(str, puertos_ordenados))
         print(Fore.BLUE + f"[*] Cadena rápida para Nmap: -p {cadena_nmap}")
         
-        # MEJORA 4: Exportación automática a formato Grepable (.gnmap)
-        nombre_archivo = f"scan_{ip_objetivo.replace('.', '_')}.gnmap"
+        # Exportación GNMAP
+        nombre_gnmap = f"scan_{ip_objetivo.replace('.', '_')}.gnmap"
         try:
-            with open(nombre_archivo, "w") as f:
+            with open(nombre_gnmap, "w") as f:
                 detalles = ", ".join([f"{p}/open/tcp" for p in puertos_ordenados])
                 f.write(f"Host: {ip_objetivo} | Ports: {detalles}\n")
-            print(Fore.BLUE + f"[*] Resultados exportados con éxito a: {nombre_archivo}")
-        except Exception as e:
-            print(Fore.RED + f"[-] No se pudo exportar el archivo: {e}")
+        except Exception:
+            pass
             
-        # MEJORA 5: Despliegue automatizado de vectores de ataque sugeridos
-        print(Fore.MAGENTA + "\n[!] MAPEO DE SUPERFICIE DE ATAQUE (VECTORES SUGERIDOS):")
-        print(Fore.CYAN + "=" * 55)
+        # Exportación JSON Moderna
+        nombre_json = f"reporte_{ip_objetivo.replace('.', '_')}.json"
+        data_json = {
+            "target": ip_objetivo,
+            "scan_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "execution_time_seconds": round(tiempo_fin - tiempo_inicio, 2),
+            "open_ports": []
+        }
+        
+        for p in puertos_ordenados:
+            data_json["open_ports"].append({
+                "port": p,
+                "service": PUERTOS_CLAVE.get(p, "Desconocido"),
+                "banner": banners_encontrados.get(p, ""),
+                "attack_vector": VECTORES_ATAQUE.get(p, "N/A")
+            })
+            
+        try:
+            with open(nombre_json, "w") as f:
+                json.dump(data_json, f, indent=4)
+            print(Fore.BLUE + f"[*] Reportes exportados con éxito: {nombre_gnmap} y {nombre_json}")
+        except Exception as e:
+            print(Fore.RED + f"[-] No se pudieron exportar los reportes: {e}")
+            
+        print(Fore.MAGENTA + "\n[!] INTELIGENCIA DE SUPERFICIE DE ATAQUE:")
+        print(Fore.CYAN + "=" * 65)
         for puerto in puertos_ordenados:
             if puerto in VECTORES_ATAQUE:
-                print(Fore.YELLOW + f"-> Puerto {puerto}: " + Fore.WHITE + VECTORES_ATAQUE[puerto])
-        print(Fore.CYAN + "=" * 55)
+                print(Fore.YELLOW + f"-> Puerto {puerto} ({PUERTOS_CLAVE.get(puerto, 'Desconocido')}): " + Fore.WHITE + VECTORES_ATAQUE[puerto])
+            
+            banner = banners_encontrados.get(puerto, "")
+            if banner and "No se pudo" not in banner and "silencioso" not in banner:
+                print(Fore.LIGHTGREEN_EX + f"   [!] Versión Detectada: {banner}")
+        print(Fore.CYAN + "=" * 65)
         
     else:
-        print(Fore.RED + "\n[-] No se detectaron puertos objetivos abiertos en este host.")
+        print(Fore.RED + "\n[-] No se detectaron puertos abiertos en este host.")
 
 if __name__ == "__main__":
-    ip_objetivo = input("[*] Ingrese la dirección IP del objetivo: ")
-    escanear_puertos(ip_objetivo)
+    # Uso de argparse para permitir ejecución directa desde la consola con parámetros
+    parser = argparse.ArgumentParser(description="Escáner de Puertos Concurrente (RainScan)")
+    parser.add_argument("-t", "--target", help="Dirección IP objetivo", required=False)
+    parser.add_argument("-m", "--modo", help="Modo (1: Top, 2: Específicos, 3: Rango)", choices=["1", "2", "3"])
+    parser.add_argument("-p", "--puertos", help="Puertos (ej: '22,80' para modo 2, o '1-100' para modo 3)")
+    
+    args = parser.parse_args()
+    
+    # Si se pasan parámetros, corre automático. Si no, pide la IP de forma manual.
+    ip = args.target if args.target else input(Fore.BLUE + "[*] Ingrese la dirección IP del objetivo: " + Style.RESET_ALL).strip()
+    
+    escanear_puertos(ip, args.modo, args.puertos)
